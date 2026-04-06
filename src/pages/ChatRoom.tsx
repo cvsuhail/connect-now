@@ -139,7 +139,7 @@ const ChatRoom = () => {
         {/* Connection Status */}
         {connectionState === "connected" && (
           <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "hsl(142 76% 46%)" }} />
             <span className="text-xs text-muted-foreground">Connected</span>
           </div>
         )}
