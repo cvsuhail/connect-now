@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { registerAuthenticatedUser } from "@/lib/adminStore";
 
 export type UserProfile = {
   nickname: string;
@@ -29,6 +30,7 @@ const emptyProfile: UserProfile = {
 type AuthProfileContextType = {
   session: Session | null;
   isAuthenticated: boolean;
+  shouldSetupProfile: boolean;
   profile: UserProfile;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
@@ -49,6 +51,31 @@ const getGooglePhoto = (session: Session | null) => {
   return metadata?.avatar_url || metadata?.picture || "";
 };
 
+const hasProfileData = (p: UserProfile) => {
+  return Boolean(
+    p.nickname.trim() ||
+      p.bio.trim() ||
+      p.instagramId.trim() ||
+      p.snapchatId.trim() ||
+      p.whatsapp.trim() ||
+      p.portfolioUrl.trim() ||
+      p.photoUrl.trim()
+  );
+};
+
+const parseProfileFromSession = (session: Session | null): Partial<UserProfile> => {
+  const metadata = session?.user?.user_metadata ?? {};
+  return {
+    nickname: (metadata.nickname as string) || getGoogleDefaultNickname(session),
+    photoUrl: (metadata.photo_url as string) || getGooglePhoto(session),
+    instagramId: (metadata.instagram_id as string) || "",
+    snapchatId: (metadata.snapchat_id as string) || "",
+    bio: (metadata.bio as string) || "",
+    whatsapp: (metadata.whatsapp as string) || "",
+    portfolioUrl: (metadata.portfolio_url as string) || "",
+  };
+};
+
 const getOAuthRedirectUrl = () => {
   const baseUrl = window.location.origin;
   return `${baseUrl}/?auth=callback`;
@@ -58,6 +85,7 @@ export const AuthProfileProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile>(emptyProfile);
+  const [shouldSetupProfile, setShouldSetupProfile] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem(PROFILE_STORAGE_KEY);
@@ -90,13 +118,31 @@ export const AuthProfileProvider = ({ children }: { children: ReactNode }) => {
   }, [profile]);
 
   useEffect(() => {
-    if (!session) return;
-    setProfile((prev) => ({
-      ...prev,
-      isGuest: false,
-      nickname: prev.nickname || getGoogleDefaultNickname(session),
-      photoUrl: prev.photoUrl || getGooglePhoto(session),
-    }));
+    if (!session) {
+      setShouldSetupProfile(false);
+      return;
+    }
+
+    const metadata = session.user.user_metadata ?? {};
+    const fromSupabase = parseProfileFromSession(session);
+    const profileCompleted = metadata.profile_completed === true;
+
+    setProfile((prev) => {
+      const merged = {
+        ...prev,
+        ...fromSupabase,
+        isGuest: false,
+      };
+      setShouldSetupProfile(!profileCompleted && !hasProfileData(merged));
+      return merged;
+    });
+
+    registerAuthenticatedUser({
+      id: session.user.id,
+      email: session.user.email,
+      nickname: fromSupabase.nickname,
+      photoUrl: fromSupabase.photoUrl,
+    });
   }, [session]);
 
   const signInWithGoogle = async () => {
@@ -147,6 +193,7 @@ export const AuthProfileProvider = ({ children }: { children: ReactNode }) => {
     if (session) {
       await supabase.auth.updateUser({
         data: {
+          email: session.user.email || undefined,
           nickname: merged.nickname,
           photo_url: merged.photoUrl,
           instagram_id: merged.instagramId,
@@ -154,8 +201,10 @@ export const AuthProfileProvider = ({ children }: { children: ReactNode }) => {
           bio: merged.bio,
           whatsapp: merged.whatsapp,
           portfolio_url: merged.portfolioUrl,
+          profile_completed: true,
         },
       });
+      setShouldSetupProfile(false);
     }
 
     return merged;
@@ -164,6 +213,7 @@ export const AuthProfileProvider = ({ children }: { children: ReactNode }) => {
   const value = {
     session,
     isAuthenticated: Boolean(session),
+    shouldSetupProfile,
     profile,
     loading,
     signInWithGoogle,

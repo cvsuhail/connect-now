@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Landing from "./pages/Landing";
 import ChatRoom from "./pages/ChatRoom";
 import NotFound from "./pages/NotFound";
+import SuperAdmin from "./pages/SuperAdmin";
 import { OnlineCountProvider } from "@/hooks/useOnlineCount";
 import { AuthProfileProvider } from "@/hooks/useAuthProfile";
 
@@ -22,6 +23,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Landing />} />
               <Route path="/chat" element={<ChatRoom />} />
+              <Route path="/super-admin-397" element={<SuperAdmin />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>

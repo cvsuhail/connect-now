@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Send } from "lucide-react";
+import type { UserProfile } from "@/hooks/useAuthProfile";
 
 export interface ChatMessage {
   id: string;
@@ -12,9 +13,10 @@ interface ChatPanelProps {
   messages: ChatMessage[];
   onSend: (text: string) => void;
   isTyping?: boolean;
+  strangerProfile?: UserProfile | null;
 }
 
-const ChatPanel = ({ messages, onSend, isTyping }: ChatPanelProps) => {
+const ChatPanel = ({ messages, onSend, isTyping, strangerProfile }: ChatPanelProps) => {
   const [input, setInput] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -30,6 +32,28 @@ const ChatPanel = ({ messages, onSend, isTyping }: ChatPanelProps) => {
 
   return (
     <div className="flex flex-col h-full bg-gradient-to-b from-background to-secondary/20">
+      <div className="p-3 border-b border-border/80 bg-background/85 backdrop-blur">
+        <div className="flex items-start gap-3">
+          <div className="h-11 w-11 rounded-full overflow-hidden border border-border bg-secondary shrink-0">
+            {strangerProfile?.photoUrl ? (
+              <img src={strangerProfile.photoUrl} alt="Stranger profile" className="h-full w-full object-cover" />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center text-sm font-semibold text-muted-foreground">
+                {(strangerProfile?.nickname || "S").slice(0, 1).toUpperCase()}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0 space-y-0.5">
+            <p className="text-sm font-semibold truncate">{strangerProfile?.nickname || "Stranger"}</p>
+            {strangerProfile?.bio && <p className="text-xs text-muted-foreground truncate">{strangerProfile.bio}</p>}
+            <div className="text-[11px] text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+              {strangerProfile?.instagramId && <span>IG: {strangerProfile.instagramId}</span>}
+              {strangerProfile?.whatsapp && <span>WA: {strangerProfile.whatsapp}</span>}
+              {strangerProfile?.snapchatId && <span>Snap: {strangerProfile.snapchatId}</span>}
+            </div>
+          </div>
+        </div>
+      </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 && (
           <div className="text-center mt-8 rounded-xl border border-dashed border-border p-5 bg-background/60">

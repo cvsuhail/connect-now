@@ -4,13 +4,16 @@ import Particles from "@/components/Particles";
 import { motion } from "framer-motion";
 import { StartChatFlow } from "@/components/StartChatFlow";
 import { useOnlineCount } from "@/hooks/useOnlineCount";
+import { useAuthProfile } from "@/hooks/useAuthProfile";
 import { Users } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 const Landing = () => {
   const [isFlowOpen, setIsFlowOpen] = useState(false);
+  const [startAtProfile, setStartAtProfile] = useState(false);
   const [skipAgeGate, setSkipAgeGate] = useState(false);
   const onlineCount = useOnlineCount();
+  const { isAuthenticated } = useAuthProfile();
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -90,20 +93,38 @@ const Landing = () => {
           whileHover={{ scale: 1.05, boxShadow: "0 0 30px hsl(var(--accent)/0.5)" }}
           whileTap={{ scale: 0.95 }}
           transition={{ delay: 0.6, type: "spring", stiffness: 400, damping: 10 }}
-          onClick={() => setIsFlowOpen(true)}
+          onClick={() => {
+            setStartAtProfile(false);
+            setIsFlowOpen(true);
+          }}
           className="relative bg-accent text-accent-foreground font-bold text-xl md:text-2xl px-12 py-5 rounded-full mt-6 overflow-hidden group"
         >
           <span className="relative z-10">Start Chatting</span>
           <div className="absolute inset-0 h-full w-0 bg-white/20 transition-all duration-300 ease-out group-hover:w-full z-0" />
         </motion.button>
+
+        {isAuthenticated && (
+          <button
+            onClick={() => {
+              setSkipAgeGate(true);
+              setStartAtProfile(true);
+              setIsFlowOpen(true);
+            }}
+            className="rounded-full border border-border bg-secondary/60 px-6 py-2.5 text-sm font-medium hover:bg-secondary transition-colors"
+          >
+            Edit Profile
+          </button>
+        )}
       </div>
 
       <StartChatFlow
         isOpen={isFlowOpen}
         skipAgeGate={skipAgeGate}
+        startAtProfile={startAtProfile}
         onClose={() => {
           setIsFlowOpen(false);
           setSkipAgeGate(false);
+          setStartAtProfile(false);
         }}
       />
 

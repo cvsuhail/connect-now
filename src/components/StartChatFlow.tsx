@@ -1,24 +1,26 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Video, MessageSquare, AlertTriangle, LogIn, UserRound, BadgeCheck, Sparkles } from "lucide-react";
+import { X, AlertTriangle, LogIn, UserRound, BadgeCheck, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuthProfile } from "@/hooks/useAuthProfile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { getActiveBanForEmail } from "@/lib/adminStore";
 
 interface StartChatFlowProps {
   isOpen: boolean;
   onClose: () => void;
   skipAgeGate?: boolean;
+  startAtProfile?: boolean;
 }
 
 const GOOGLE_AUTH_PENDING_KEY = "google-auth-pending";
 
-export const StartChatFlow = ({ isOpen, onClose, skipAgeGate = false }: StartChatFlowProps) => {
+export const StartChatFlow = ({ isOpen, onClose, skipAgeGate = false, startAtProfile = false }: StartChatFlowProps) => {
   const [isRequestingCamera, setIsRequestingCamera] = useState(false);
-  const [step, setStep] = useState<"age" | "auth" | "profile" | "mode">("age");
+  const [step, setStep] = useState<"age" | "auth" | "profile">("age");
   const [form, setForm] = useState({
     nickname: "",
     photoUrl: "",
@@ -29,7 +31,7 @@ export const StartChatFlow = ({ isOpen, onClose, skipAgeGate = false }: StartCha
     portfolioUrl: "",
   });
   const navigate = useNavigate();
-  const { profile, isAuthenticated, loading, signInWithGoogle, signInAsGuest, saveProfile } = useAuthProfile();
+  const { session, profile, isAuthenticated, loading, signInWithGoogle, signInAsGuest, saveProfile } = useAuthProfile();
   const authDisplayName = profile.nickname.trim() || "Google User";
 
   useEffect(() => {
@@ -44,6 +46,10 @@ export const StartChatFlow = ({ isOpen, onClose, skipAgeGate = false }: StartCha
       whatsapp: profile.whatsapp || "",
       portfolioUrl: profile.portfolioUrl || "",
     });
+    if (startAtProfile && isAuthenticated) {
+      setStep("profile");
+      return;
+    }
     if (isAuthenticated || isReturningFromOAuth) {
       setStep("profile");
       return;
@@ -51,7 +57,7 @@ export const StartChatFlow = ({ isOpen, onClose, skipAgeGate = false }: StartCha
     if (!loading) {
       setStep("age");
     }
-  }, [isOpen, isAuthenticated, loading, profile, skipAgeGate]);
+  }, [isOpen, isAuthenticated, loading, profile, skipAgeGate, startAtProfile]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -72,8 +78,7 @@ export const StartChatFlow = ({ isOpen, onClose, skipAgeGate = false }: StartCha
     setStep("auth");
   };
 
-  const requestCameraIfNeeded = async (mode: "video" | "chat") => {
-    if (mode !== "video") return true;
+  const requestCameraIfNeeded = async () => {
     setIsRequestingCamera(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -87,12 +92,19 @@ export const StartChatFlow = ({ isOpen, onClose, skipAgeGate = false }: StartCha
     }
   };
 
-  const startChat = async (mode: "video" | "chat") => {
-    const ok = await requestCameraIfNeeded(mode);
+  const startChat = async () => {
+    const currentBan = getActiveBanForEmail(session?.user?.email);
+    if (currentBan) {
+      const secondsLeft = Math.max(1, Math.ceil((currentBan.expiresAt - Date.now()) / 1000));
+      toast.error(`You are temporarily banned. Try again in ${secondsLeft}s.`);
+      return;
+    }
+
+    const ok = await requestCameraIfNeeded();
     if (!ok) return;
     const saved = await saveProfile(form);
     sessionStorage.setItem("active-profile", JSON.stringify(saved));
-    navigate(`/chat?mode=${mode}`);
+    navigate("/chat?mode=video");
   };
 
   const handleGoogle = async () => {
@@ -237,43 +249,7 @@ export const StartChatFlow = ({ isOpen, onClose, skipAgeGate = false }: StartCha
                   <Input placeholder="WhatsApp (optional)" value={form.whatsapp} onChange={(e) => setForm((p) => ({ ...p, whatsapp: e.target.value }))} />
                   <Input placeholder="Portfolio link (optional)" value={form.portfolioUrl} onChange={(e) => setForm((p) => ({ ...p, portfolioUrl: e.target.value }))} />
                   <Textarea placeholder="Bio (optional)" value={form.bio} onChange={(e) => setForm((p) => ({ ...p, bio: e.target.value }))} />
-                  <Button onClick={() => setStep("mode")} className="mt-2">Continue</Button>
-                </motion.div>
-              )}
-
-              {step === "mode" && (
-                <motion.div
-                  key="mode"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 20 }}
-                  className="space-y-4"
-                >
-                  {isAuthenticated && (
-                    <div className="rounded-2xl border border-accent/30 bg-accent/10 p-3 flex items-center gap-3">
-                      <BadgeCheck className="text-accent" size={20} />
-                      <p className="text-sm text-foreground">
-                        Ready to start as <span className="font-semibold">{authDisplayName}</span>
-                      </p>
-                    </div>
-                  )}
-                  <h2 className="text-2xl font-bold text-center">Pick chat mode</h2>
-                  <button
-                    onClick={() => startChat("video")}
-                    className="w-full py-4 rounded-xl bg-accent text-accent-foreground font-semibold flex items-center justify-center gap-2"
-                    disabled={isRequestingCamera}
-                  >
-                    <Video size={20} />
-                    Start Video Chat
-                  </button>
-                  <button
-                    onClick={() => startChat("chat")}
-                    className="w-full py-4 rounded-xl border border-input bg-background hover:bg-accent hover:text-accent-foreground transition-colors font-semibold flex items-center justify-center gap-2"
-                    disabled={isRequestingCamera}
-                  >
-                    <MessageSquare size={20} />
-                    Start Text Chat
-                  </button>
+                  <Button onClick={() => startChat()} className="mt-2">Save & Start Video Chat</Button>
                 </motion.div>
               )}
             </AnimatePresence>

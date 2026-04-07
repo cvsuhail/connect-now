@@ -7,6 +7,8 @@ import ChatPanel, { ChatMessage } from "@/components/ChatPanel";
 import MatchingLoader from "@/components/MatchingLoader";
 import { useAuthProfile, type UserProfile } from "@/hooks/useAuthProfile";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { addReport } from "@/lib/adminStore";
+import { toast } from "sonner";
 
 type Cell = "X" | "O" | null;
 const winningLines = [
@@ -35,7 +37,7 @@ const ChatRoom = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const mode = (searchParams.get("mode") as "chat" | "video") || "video";
-  const { profile } = useAuthProfile();
+  const { profile, session } = useAuthProfile();
   const [localProfile, setLocalProfile] = useState<UserProfile>(profile);
   const [remoteProfile, setRemoteProfile] = useState<UserProfile | null>(null);
   const [remotePeerId, setRemotePeerId] = useState<string>("");
@@ -178,6 +180,19 @@ const ChatRoom = () => {
     setGameWinner(null);
   };
 
+  const reportStranger = () => {
+    const reason = window.prompt("Report reason (nudity, abuse, spam, etc.)");
+    if (!reason?.trim()) return;
+    addReport({
+      reporterEmail: session?.user.email || "guest@local",
+      reporterNickname: localProfile.nickname || "Guest",
+      reportedPeerId: remotePeerId || "unknown-peer",
+      reportedNickname: remoteProfile?.nickname || "Unknown",
+      reason: reason.trim(),
+    });
+    toast.success("Report submitted to admin");
+  };
+
   const renderOverlays = () => {
     return (
       <>
@@ -281,6 +296,14 @@ const ChatRoom = () => {
                 <span className="text-xs font-medium text-foreground tracking-wide">Connected</span>
               </div>
             )}
+            {connectionState === "connected" && (
+              <button
+                onClick={reportStranger}
+                className="absolute top-4 left-28 z-20 text-xs rounded-full px-3 py-1.5 bg-destructive text-destructive-foreground"
+              >
+                Report
+              </button>
+            )}
 
             <button
               onClick={() => setChatOpen(!chatOpen)}
@@ -361,7 +384,7 @@ const ChatRoom = () => {
             </div>
 
             <div className="min-h-0 flex-1">
-              <ChatPanel messages={messages} onSend={handleSend} />
+              <ChatPanel messages={messages} onSend={handleSend} strangerProfile={remoteProfile} />
             </div>
 
             <div className="px-4 pb-4">
@@ -418,7 +441,7 @@ const ChatRoom = () => {
                 </div>
               </div>
             </div>
-            <ChatPanel messages={messages} onSend={handleSend} />
+            <ChatPanel messages={messages} onSend={handleSend} strangerProfile={remoteProfile} />
           </div>
         </div>
       ) : (
@@ -482,7 +505,7 @@ const ChatRoom = () => {
               <button onClick={handleStop} className="text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90 px-3 py-1.5 rounded-full font-medium transition-colors">Stop</button>
             </div>
           )}
-          <ChatPanel messages={messages} onSend={handleSend} />
+          <ChatPanel messages={messages} onSend={handleSend} strangerProfile={remoteProfile} />
         </div>
       )}
     </div>
