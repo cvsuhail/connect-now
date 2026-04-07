@@ -6,46 +6,25 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Landing from "./pages/Landing";
 import ChatRoom from "./pages/ChatRoom";
 import NotFound from "./pages/NotFound";
-import { useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { OnlineCountProvider } from "@/hooks/useOnlineCount";
 
 const queryClient = new QueryClient();
 
-const PresenceProvider = ({ children }: { children: React.ReactNode }) => {
-  useEffect(() => {
-    const channel = supabase.channel('global-presence', {
-      config: { presence: { key: crypto.randomUUID() } }
-    });
-
-    channel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await channel.track({ online_at: new Date().toISOString() });
-      }
-    });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
-
-  return <>{children}</>;
-};
-
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <PresenceProvider>
+    <OnlineCountProvider>
       <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/chat" element={<ChatRoom />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/chat" element={<ChatRoom />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
       </TooltipProvider>
-    </PresenceProvider>
+    </OnlineCountProvider>
   </QueryClientProvider>
 );
 
