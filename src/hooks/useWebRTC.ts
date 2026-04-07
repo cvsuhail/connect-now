@@ -6,7 +6,7 @@ const ICE_SERVERS = [
   { urls: "stun:stun1.l.google.com:19302" },
 ];
 
-export const useWebRTC = () => {
+export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (text: string) => void) => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -16,8 +16,14 @@ export const useWebRTC = () => {
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const sessionIdRef = useRef<string>("");
   const userIdRef = useRef<string>(crypto.randomUUID());
+  
+  const onReceiveMessageRef = useRef(onReceiveMessage);
+  useEffect(() => {
+    onReceiveMessageRef.current = onReceiveMessage;
+  }, [onReceiveMessage]);
 
   const getMedia = useCallback(async () => {
     try {
@@ -59,10 +65,13 @@ export const useWebRTC = () => {
     cleanup();
     setConnectionState("matching");
 
-    const stream = localStream || (await getMedia());
-    if (!stream) {
-      setConnectionState("idle");
-      return;
+    let stream: MediaStream | null = null;
+    if (mode === "video") {
+      stream = localStream || (await getMedia());
+      if (!stream) {
+        setConnectionState("idle");
+        return;
+      }
     }
 
     // Use Supabase Realtime for signaling
@@ -75,7 +84,23 @@ export const useWebRTC = () => {
     const remote = new MediaStream();
     setRemoteStream(remote);
 
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    // Always create a data channel so WebRTC has something to negotiate if there are no tracks
+    const dc = pc.createDataChannel("chat");
+    dataChannelRef.current = dc;
+    dc.onmessage = (event) => {
+      onReceiveMessageRef.current?.(event.data);
+    };
+
+    if (stream) {
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    }
+
+    pc.ondatachannel = (event) => {
+      dataChannelRef.current = event.channel;
+      event.channel.onmessage = (e) => {
+        onReceiveMessageRef.current?.(e.data);
+      };
+    };
 
     pc.ontrack = (event) => {
       event.streams[0]?.getTracks().forEach((track) => remote.addTrack(track));
@@ -176,6 +201,12 @@ export const useWebRTC = () => {
     };
   }, []);
 
+  const sendMessage = useCallback((text: string) => {
+    if (dataChannelRef.current?.readyState === "open") {
+      dataChannelRef.current.send(text);
+    }
+  }, []);
+
   return {
     localStream,
     remoteStream,
@@ -189,5 +220,6 @@ export const useWebRTC = () => {
     next,
     toggleMute,
     toggleCamera,
+    sendMessage,
   };
 };
