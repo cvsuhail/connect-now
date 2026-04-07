@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { UserProfile } from "@/hooks/useAuthProfile";
 
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
@@ -27,7 +28,18 @@ const ICE_SERVERS: RTCIceServer[] = [
   },
 ];
 
-export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (text: string) => void) => {
+type WireMessage =
+  | { type: "chat"; text: string }
+  | { type: "profile"; profile: UserProfile; peerId: string }
+  | { type: "ttt"; index: number; symbol: "X" | "O" };
+
+export const useWebRTC = (
+  mode: "video" | "chat" = "video",
+  onReceiveMessage?: (text: string) => void,
+  localProfile?: UserProfile,
+  onReceiveProfile?: (profile: UserProfile, peerId: string) => void,
+  onReceiveTicTacToeMove?: (index: number, symbol: "X" | "O") => void,
+) => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -40,13 +52,53 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const sessionIdRef = useRef<string>("");
   const userIdRef = useRef<string>(crypto.randomUUID());
+  const matchedPeerIdRef = useRef<string | null>(null);
   const seekingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isMatchedRef = useRef(false);
   
   const onReceiveMessageRef = useRef(onReceiveMessage);
+  const localProfileRef = useRef(localProfile);
+  const onReceiveProfileRef = useRef(onReceiveProfile);
+  const onReceiveTicTacToeMoveRef = useRef(onReceiveTicTacToeMove);
   useEffect(() => {
     onReceiveMessageRef.current = onReceiveMessage;
   }, [onReceiveMessage]);
+  useEffect(() => {
+    localProfileRef.current = localProfile;
+  }, [localProfile]);
+  useEffect(() => {
+    onReceiveProfileRef.current = onReceiveProfile;
+  }, [onReceiveProfile]);
+  useEffect(() => {
+    onReceiveTicTacToeMoveRef.current = onReceiveTicTacToeMove;
+  }, [onReceiveTicTacToeMove]);
+
+  const sendPacket = useCallback((payload: WireMessage) => {
+    if (dataChannelRef.current?.readyState === "open") {
+      dataChannelRef.current.send(JSON.stringify(payload));
+    }
+  }, []);
+
+  const sendProfile = useCallback(() => {
+    if (!localProfileRef.current) return;
+    sendPacket({
+      type: "profile",
+      profile: localProfileRef.current,
+      peerId: userIdRef.current,
+    });
+  }, [sendPacket]);
+
+  const handleIncomingMessage = useCallback((raw: string) => {
+    try {
+      const parsed = JSON.parse(raw) as WireMessage;
+      if (parsed.type === "chat") onReceiveMessageRef.current?.(parsed.text);
+      if (parsed.type === "profile") onReceiveProfileRef.current?.(parsed.profile, parsed.peerId);
+      if (parsed.type === "ttt") onReceiveTicTacToeMoveRef.current?.(parsed.index, parsed.symbol);
+      return;
+    } catch {
+      onReceiveMessageRef.current?.(raw);
+    }
+  }, []);
 
   const getMedia = useCallback(async () => {
     try {
@@ -73,6 +125,7 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
     }
     setRemoteStream(null);
     isMatchedRef.current = false;
+    matchedPeerIdRef.current = null;
   }, []);
 
   const toggleMute = useCallback(() => {
@@ -108,8 +161,6 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
 
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     pcRef.current = pc;
-    let matchedPeerId: string | null = null;
-
     const remote = new MediaStream();
     setRemoteStream(remote);
 
@@ -117,7 +168,10 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
     const dc = pc.createDataChannel("chat");
     dataChannelRef.current = dc;
     dc.onmessage = (event) => {
-      onReceiveMessageRef.current?.(event.data);
+      handleIncomingMessage(event.data);
+    };
+    dc.onopen = () => {
+      sendProfile();
     };
 
     if (stream) {
@@ -127,7 +181,10 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
     pc.ondatachannel = (event) => {
       dataChannelRef.current = event.channel;
       event.channel.onmessage = (e) => {
-        onReceiveMessageRef.current?.(e.data);
+        handleIncomingMessage(e.data);
+      };
+      event.channel.onopen = () => {
+        sendProfile();
       };
     };
 
@@ -150,11 +207,11 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
 
     // Set up ICE candidate handler globally - sends to matched peer
     pc.onicecandidate = (event) => {
-      if (event.candidate && channelRef.current && matchedPeerId) {
+      if (event.candidate && channelRef.current && matchedPeerIdRef.current) {
         channel.send({
           type: "broadcast",
           event: "ice-candidate",
-          payload: { candidate: event.candidate, targetId: matchedPeerId, senderId: userIdRef.current },
+          payload: { candidate: event.candidate, targetId: matchedPeerIdRef.current, senderId: userIdRef.current },
         });
       }
     };
@@ -164,7 +221,7 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
         if (payload.targetId !== userIdRef.current) return;
         if (isMatchedRef.current) return;
         isMatchedRef.current = true;
-        matchedPeerId = payload.senderId;
+        matchedPeerIdRef.current = payload.senderId;
         if (seekingIntervalRef.current) clearInterval(seekingIntervalRef.current);
         setConnectionState("connecting");
         
@@ -193,7 +250,9 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
         if (payload.targetId !== userIdRef.current) return;
         try {
           await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
-        } catch {}
+        } catch (err) {
+          console.debug("Failed to add ICE candidate", err);
+        }
       })
       .on("broadcast", { event: "seeking" }, async ({ payload }) => {
         if (payload.senderId === userIdRef.current) return;
@@ -203,7 +262,7 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
         if (userIdRef.current < payload.senderId) return;
 
         isMatchedRef.current = true;
-        matchedPeerId = payload.senderId;
+        matchedPeerIdRef.current = payload.senderId;
         if (seekingIntervalRef.current) clearInterval(seekingIntervalRef.current);
         setConnectionState("connecting");
 
@@ -234,7 +293,7 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
           seekingIntervalRef.current = setInterval(broadcastSeeking, 2000);
         }
       });
-  }, [localStream, getMedia, cleanup]);
+  }, [cleanup, getMedia, handleIncomingMessage, localStream, mode, sendProfile]);
 
   const stop = useCallback(() => {
     cleanup();
@@ -254,7 +313,7 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
       cleanup();
       localStream?.getTracks().forEach((t) => t.stop());
     };
-  }, []);
+  }, [cleanup, localStream]);
 
   // Failsafe timeout: if stuck on "connecting" for over 15 seconds, assume network failure
   useEffect(() => {
@@ -269,10 +328,12 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
   }, [connectionState]);
 
   const sendMessage = useCallback((text: string) => {
-    if (dataChannelRef.current?.readyState === "open") {
-      dataChannelRef.current.send(text);
-    }
-  }, []);
+    sendPacket({ type: "chat", text });
+  }, [sendPacket]);
+
+  const sendTicTacToeMove = useCallback((index: number, symbol: "X" | "O") => {
+    sendPacket({ type: "ttt", index, symbol });
+  }, [sendPacket]);
 
   return {
     localStream,
@@ -288,5 +349,8 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
     toggleMute,
     toggleCamera,
     sendMessage,
+    sendTicTacToeMove,
+    userPeerId: userIdRef.current,
+    remotePeerId: matchedPeerIdRef.current,
   };
 };

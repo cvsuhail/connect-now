@@ -7,23 +7,26 @@ import Landing from "./pages/Landing";
 import ChatRoom from "./pages/ChatRoom";
 import NotFound from "./pages/NotFound";
 import { OnlineCountProvider } from "@/hooks/useOnlineCount";
+import { AuthProfileProvider } from "@/hooks/useAuthProfile";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <OnlineCountProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Landing />} />
-            <Route path="/chat" element={<ChatRoom />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
+      <AuthProfileProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<Landing />} />
+              <Route path="/chat" element={<ChatRoom />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProfileProvider>
     </OnlineCountProvider>
   </QueryClientProvider>
 );

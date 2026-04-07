@@ -1,13 +1,24 @@
 import { useState } from "react";
+import { useEffect } from "react";
 import Particles from "@/components/Particles";
 import { motion } from "framer-motion";
 import { StartChatFlow } from "@/components/StartChatFlow";
 import { useOnlineCount } from "@/hooks/useOnlineCount";
 import { Users } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 
 const Landing = () => {
   const [isFlowOpen, setIsFlowOpen] = useState(false);
   const onlineCount = useOnlineCount();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (searchParams.get("auth") === "callback") {
+      setIsFlowOpen(true);
+      searchParams.delete("auth");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   return (
     <div className="relative min-h-[100dvh] flex flex-col items-center justify-center px-6 overflow-hidden">

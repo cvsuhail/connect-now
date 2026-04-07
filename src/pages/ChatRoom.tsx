@@ -5,17 +5,62 @@ import { useWebRTC } from "@/hooks/useWebRTC";
 import VideoControls from "@/components/VideoControls";
 import ChatPanel, { ChatMessage } from "@/components/ChatPanel";
 import MatchingLoader from "@/components/MatchingLoader";
+import { useAuthProfile, type UserProfile } from "@/hooks/useAuthProfile";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+type Cell = "X" | "O" | null;
+const winningLines = [
+  [0, 1, 2],
+  [3, 4, 5],
+  [6, 7, 8],
+  [0, 3, 6],
+  [1, 4, 7],
+  [2, 5, 8],
+  [0, 4, 8],
+  [2, 4, 6],
+];
+
+const initialGuestProfile: UserProfile = {
+  nickname: "Guest",
+  photoUrl: "",
+  instagramId: "",
+  snapchatId: "",
+  bio: "",
+  whatsapp: "",
+  portfolioUrl: "",
+  isGuest: true,
+};
 
 const ChatRoom = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const mode = (searchParams.get("mode") as "chat" | "video") || "video";
+  const { profile } = useAuthProfile();
+  const [localProfile, setLocalProfile] = useState<UserProfile>(profile);
+  const [remoteProfile, setRemoteProfile] = useState<UserProfile | null>(null);
+  const [remotePeerId, setRemotePeerId] = useState<string>("");
+  const [board, setBoard] = useState<Cell[]>(Array(9).fill(null));
+  const [gameWinner, setGameWinner] = useState<"X" | "O" | "draw" | null>(null);
 
   const handleReceiveMessage = useCallback((text: string) => {
     setMessages((prev) => [
       ...prev,
       { id: crypto.randomUUID(), text, sender: "stranger", timestamp: Date.now() },
     ]);
+  }, []);
+
+  const handleReceiveProfile = useCallback((incomingProfile: UserProfile, remotePeerId: string) => {
+    setRemoteProfile(incomingProfile);
+    setRemotePeerId(remotePeerId);
+  }, []);
+
+  const handleReceiveTicTacToeMove = useCallback((index: number, symbol: "X" | "O") => {
+    setBoard((prev) => {
+      if (prev[index]) return prev;
+      const next = [...prev];
+      next[index] = symbol;
+      return next;
+    });
   }, []);
 
   const {
@@ -31,7 +76,9 @@ const ChatRoom = () => {
     toggleMute,
     toggleCamera,
     sendMessage,
-  } = useWebRTC(mode, handleReceiveMessage);
+    sendTicTacToeMove,
+    userPeerId,
+  } = useWebRTC(mode, handleReceiveMessage, localProfile, handleReceiveProfile, handleReceiveTicTacToeMove);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -39,12 +86,29 @@ const ChatRoom = () => {
   const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
+    const fromSession = sessionStorage.getItem("active-profile");
+    if (fromSession) {
+      try {
+        setLocalProfile(JSON.parse(fromSession));
+        return;
+      } catch {
+        setLocalProfile(profile || initialGuestProfile);
+      }
+    }
+    setLocalProfile(profile || initialGuestProfile);
+  }, [profile]);
+
+  useEffect(() => {
     startMatching();
-  }, []);
+  }, [startMatching]);
 
   useEffect(() => {
     if (connectionState === "matching") {
       setMessages([]);
+      setRemoteProfile(null);
+      setRemotePeerId("");
+      setBoard(Array(9).fill(null));
+      setGameWinner(null);
     }
   }, [connectionState]);
 
@@ -71,6 +135,43 @@ const ChatRoom = () => {
   const handleStop = () => {
     stop();
     navigate("/");
+  };
+
+  const mySymbol: "X" | "O" = !remotePeerId || userPeerId < remotePeerId ? "X" : "O";
+
+  const currentTurn = board.filter(Boolean).length % 2 === 0 ? "X" : "O";
+
+  useEffect(() => {
+    for (const [a, b, c] of winningLines) {
+      if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+        setGameWinner(board[a] as "X" | "O");
+        return;
+      }
+    }
+    if (board.every(Boolean)) {
+      setGameWinner("draw");
+    } else {
+      setGameWinner(null);
+    }
+  }, [board]);
+
+  const playMove = (index: number) => {
+    if (localProfile.isGuest) return;
+    if (connectionState !== "connected" || gameWinner) return;
+    if (board[index]) return;
+    if (currentTurn !== mySymbol) return;
+
+    setBoard((prev) => {
+      const next = [...prev];
+      next[index] = mySymbol;
+      return next;
+    });
+    sendTicTacToeMove(index, mySymbol);
+  };
+
+  const resetGame = () => {
+    setBoard(Array(9).fill(null));
+    setGameWinner(null);
   };
 
   const renderOverlays = () => {
@@ -202,6 +303,55 @@ const ChatRoom = () => {
             : "flex-1 w-full relative z-10"
         }
       >
+        <div className="p-3 border-b border-border space-y-3">
+          <div className="grid grid-cols-1 gap-2">
+            {[{ title: "You", data: localProfile }, { title: "Stranger", data: remoteProfile }].map((item) => (
+              <div key={item.title} className="rounded-xl border border-border p-2 bg-secondary/40">
+                <div className="flex gap-2 items-start">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={item.data?.photoUrl} />
+                    <AvatarFallback>{(item.data?.nickname || "?").slice(0, 1).toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="text-xs space-y-0.5">
+                    <p className="font-semibold">{item.title}: {item.data?.nickname || "Unknown"}</p>
+                    {item.data?.bio && <p className="text-muted-foreground">{item.data.bio}</p>}
+                    {item.data?.instagramId && <p>Instagram: {item.data.instagramId}</p>}
+                    {item.data?.snapchatId && <p>Snapchat: {item.data.snapchatId}</p>}
+                    {item.data?.whatsapp && <p>WhatsApp: {item.data.whatsapp}</p>}
+                    {item.data?.portfolioUrl && <p className="truncate">Portfolio: {item.data.portfolioUrl}</p>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-xl border border-border p-3 bg-secondary/30">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold">Realtime Tic-Tac-Toe</p>
+              <button className="text-xs underline" onClick={resetGame}>Reset</button>
+            </div>
+            {localProfile.isGuest && (
+              <p className="text-[11px] text-muted-foreground mb-2">
+                Sign in with Google to play realtime games.
+              </p>
+            )}
+            <p className="text-[11px] text-muted-foreground mb-2">
+              You are <strong>{mySymbol}</strong>. {gameWinner ? (gameWinner === "draw" ? "Draw game." : `Winner: ${gameWinner}`) : `Turn: ${currentTurn}`}
+            </p>
+            <div className="grid grid-cols-3 gap-1">
+              {board.map((cell, idx) => (
+                <button
+                  key={idx}
+                  className="h-10 rounded-md bg-background border border-border text-lg font-bold"
+                  onClick={() => playMove(idx)}
+                >
+                  {cell}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {mode === "chat" && connectionState === "connected" && (
           <div className="absolute top-safe right-4 mt-4 z-40 flex items-center gap-3">
              <div className="flex items-center gap-2 px-3 py-1.5 glass rounded-full">

@@ -1,1 +1,11 @@
-project_id = "qnbzlaejlpkglclmjcbo"
+project_id = "iriazeofdenrhgjpzveg"
+
+[auth]
+enabled = true
+site_url = "https://umigle.awwads.in"
+additional_redirect_urls = ["http://localhost:5173/?auth=callback", "https://umigle.awwads.in/?auth=callback"]
+
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
