@@ -117,7 +117,7 @@ const ChatRoom = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col lg:flex-row bg-background overflow-hidden relative">
+    <div className="h-[100dvh] flex flex-col lg:flex-row bg-background overflow-hidden relative">
       {/* Dynamic Overlays that always cover the entire app to block interactions while matching */}
       <div className={`absolute inset-0 z-50 pointer-events-none ${connectionState === "connected" && !error ? "hidden" : ""}`}>
         <div className="relative w-full h-full pointer-events-auto">
@@ -203,9 +203,9 @@ const ChatRoom = () => {
         }
       >
         {mode === "chat" && connectionState === "connected" && (
-          <div className="absolute top-4 right-4 z-40 flex items-center gap-3">
+          <div className="absolute top-safe right-4 mt-4 z-40 flex items-center gap-3">
              <div className="flex items-center gap-2 px-3 py-1.5 glass rounded-full">
-              <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: "hsl(142 76% 46%)" }} />
+              <div className="w-2 h-2 rounded-full animate-pulse shadow-[0_0_8px_hsl(142_76%_46%)]" style={{ backgroundColor: "hsl(142 76% 46%)" }} />
               <span className="text-xs font-medium text-foreground">Connected</span>
             </div>
             <button onClick={next} className="text-xs bg-secondary hover:bg-secondary/80 px-3 py-1.5 rounded-full font-medium transition-colors">Skip</button>

@@ -10,7 +10,7 @@ const Landing = () => {
   const onlineCount = useOnlineCount();
 
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-center px-6 overflow-hidden">
+    <div className="relative min-h-[100dvh] flex flex-col items-center justify-center px-6 overflow-hidden">
       <Particles />
 
       {/* Gradient glow behind CTA */}
