@@ -4,9 +4,18 @@ import { supabase } from "@/integrations/supabase/client";
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:19302" },
+  { urls: "stun:stun3.l.google.com:19302" },
+  { urls: "stun:stun4.l.google.com:19302" },
+  // Metered TURN (free, reliable)
   { urls: "turn:openrelay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
   { urls: "turn:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
-  { urls: "turn:openrelay.metered.ca:443?transport=tcp", username: "openrelayproject", credential: "openrelayproject" }
+  { urls: "turns:openrelay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+  { urls: "turn:openrelay.metered.ca:80?transport=tcp", username: "openrelayproject", credential: "openrelayproject" },
+  // Backup TURN servers
+  { urls: "turn:relay.metered.ca:80", username: "openrelayproject", credential: "openrelayproject" },
+  { urls: "turn:relay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
+  { urls: "turns:relay.metered.ca:443", username: "openrelayproject", credential: "openrelayproject" },
 ];
 
 export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (text: string) => void) => {
@@ -237,6 +246,18 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
       localStream?.getTracks().forEach((t) => t.stop());
     };
   }, []);
+
+  // Failsafe timeout: if stuck on "connecting" for over 15 seconds, assume network failure
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+    if (connectionState === "connecting") {
+      timeout = setTimeout(() => {
+        setConnectionState("disconnected");
+        console.warn("Connection timed out after 15 seconds");
+      }, 15000);
+    }
+    return () => clearTimeout(timeout);
+  }, [connectionState]);
 
   const sendMessage = useCallback((text: string) => {
     if (dataChannelRef.current?.readyState === "open") {
