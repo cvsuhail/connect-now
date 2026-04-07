@@ -1,30 +1,31 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-const METERED_DOMAIN = "umigle.metered.live";
-const METERED_API_KEY = "Bz2Bl3G_yCpg7dLdl369vah5AUsb3-5uDS6T1S5bvQKdNo0G";
-
-const FALLBACK_ICE_SERVERS: RTCIceServer[] = [
+const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
-  { urls: `stun:${METERED_DOMAIN}:80` },
-  { urls: `turn:${METERED_DOMAIN}:80`, username: "turn", credential: "turn" },
-  { urls: `turn:${METERED_DOMAIN}:443`, username: "turn", credential: "turn" },
-  { urls: `turns:${METERED_DOMAIN}:443`, username: "turn", credential: "turn" },
+  { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:19302" },
+  {
+    urls: "turn:openrelay.metered.ca:80",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+  {
+    urls: "turn:openrelay.metered.ca:443",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+  {
+    urls: "turns:openrelay.metered.ca:443",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+  {
+    urls: "turn:relay1.expressturn.com:3478",
+    username: "efKXI2ADBMEDX4JZR6",
+    credential: "VUWt5vBt5QqLFCt3",
+  },
 ];
-
-async function fetchIceServers(): Promise<RTCIceServer[]> {
-  try {
-    const res = await fetch(
-      `https://${METERED_DOMAIN}/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`
-    );
-    if (!res.ok) throw new Error("Failed to fetch TURN credentials");
-    const servers: RTCIceServer[] = await res.json();
-    return [{ urls: "stun:stun.l.google.com:19302" }, ...servers];
-  } catch (err) {
-    console.warn("Using fallback ICE servers:", err);
-    return FALLBACK_ICE_SERVERS;
-  }
-}
 
 export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (text: string) => void) => {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
@@ -105,8 +106,7 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
     const sessionId = `room-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     sessionIdRef.current = sessionId;
 
-    const iceServers = await fetchIceServers();
-    const pc = new RTCPeerConnection({ iceServers });
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     pcRef.current = pc;
     let matchedPeerId: string | null = null;
 
