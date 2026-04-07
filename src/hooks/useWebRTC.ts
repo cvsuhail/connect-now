@@ -87,6 +87,7 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
 
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     pcRef.current = pc;
+    let matchedPeerId: string | null = null;
 
     const remote = new MediaStream();
     setRemoteStream(remote);
@@ -126,10 +127,23 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
 
     channelRef.current = channel;
 
+    // Set up ICE candidate handler globally - sends to matched peer
+    pc.onicecandidate = (event) => {
+      if (event.candidate && channelRef.current && matchedPeerId) {
+        channel.send({
+          type: "broadcast",
+          event: "ice-candidate",
+          payload: { candidate: event.candidate, targetId: matchedPeerId, senderId: userIdRef.current },
+        });
+      }
+    };
+
     channel
       .on("broadcast", { event: "offer" }, async ({ payload }) => {
         if (payload.targetId !== userIdRef.current) return;
+        if (isMatchedRef.current) return;
         isMatchedRef.current = true;
+        matchedPeerId = payload.senderId;
         if (seekingIntervalRef.current) clearInterval(seekingIntervalRef.current);
         setConnectionState("connecting");
         
@@ -162,24 +176,15 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
       })
       .on("broadcast", { event: "seeking" }, async ({ payload }) => {
         if (payload.senderId === userIdRef.current) return;
-        if (isMatchedRef.current) return; // Prevent breaking existing matches
+        if (isMatchedRef.current) return;
 
         // Glare resolution: only the user with the HIGHER ID creates the offer
         if (userIdRef.current < payload.senderId) return;
 
         isMatchedRef.current = true;
+        matchedPeerId = payload.senderId;
         if (seekingIntervalRef.current) clearInterval(seekingIntervalRef.current);
         setConnectionState("connecting");
-        
-        pc.onicecandidate = (event) => {
-          if (event.candidate) {
-            channel.send({
-              type: "broadcast",
-              event: "ice-candidate",
-              payload: { candidate: event.candidate, targetId: payload.senderId, senderId: userIdRef.current },
-            });
-          }
-        };
 
         try {
           const offer = await pc.createOffer();
@@ -200,7 +205,7 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
               channel.send({
                 type: "broadcast",
                 event: "seeking",
-                payload: { senderId: userIdRef.current },
+                payload: { senderId: userIdRef.current, mode },
               });
             }
           };
@@ -208,12 +213,6 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
           seekingIntervalRef.current = setInterval(broadcastSeeking, 2000);
         }
       });
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate && channelRef.current) {
-        // Will be overridden when match is found
-      }
-    };
   }, [localStream, getMedia, cleanup]);
 
   const stop = useCallback(() => {
