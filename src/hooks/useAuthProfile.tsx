@@ -119,7 +119,7 @@ export const AuthProfileProvider = ({ children }: { children: ReactNode }) => {
 
   const signInAsGuest = () => {
     setSession(null);
-    setProfile((prev) => ({ ...prev, isGuest: true }));
+    setProfile({ ...emptyProfile, isGuest: true });
   };
 
   const signOut = async () => {

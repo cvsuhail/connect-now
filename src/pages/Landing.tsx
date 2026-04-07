@@ -9,11 +9,13 @@ import { useSearchParams } from "react-router-dom";
 
 const Landing = () => {
   const [isFlowOpen, setIsFlowOpen] = useState(false);
+  const [skipAgeGate, setSkipAgeGate] = useState(false);
   const onlineCount = useOnlineCount();
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
     if (searchParams.get("auth") === "callback") {
+      setSkipAgeGate(true);
       setIsFlowOpen(true);
       searchParams.delete("auth");
       setSearchParams(searchParams, { replace: true });
@@ -96,7 +98,14 @@ const Landing = () => {
         </motion.button>
       </div>
 
-      <StartChatFlow isOpen={isFlowOpen} onClose={() => setIsFlowOpen(false)} />
+      <StartChatFlow
+        isOpen={isFlowOpen}
+        skipAgeGate={skipAgeGate}
+        onClose={() => {
+          setIsFlowOpen(false);
+          setSkipAgeGate(false);
+        }}
+      />
 
       {/* Footer */}
       <motion.div 

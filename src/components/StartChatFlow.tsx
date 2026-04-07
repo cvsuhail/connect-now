@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Video, MessageSquare, AlertTriangle, LogIn, UserRound } from "lucide-react";
+import { X, Video, MessageSquare, AlertTriangle, LogIn, UserRound, BadgeCheck, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuthProfile } from "@/hooks/useAuthProfile";
@@ -11,9 +11,12 @@ import { Textarea } from "@/components/ui/textarea";
 interface StartChatFlowProps {
   isOpen: boolean;
   onClose: () => void;
+  skipAgeGate?: boolean;
 }
 
-export const StartChatFlow = ({ isOpen, onClose }: StartChatFlowProps) => {
+const GOOGLE_AUTH_PENDING_KEY = "google-auth-pending";
+
+export const StartChatFlow = ({ isOpen, onClose, skipAgeGate = false }: StartChatFlowProps) => {
   const [isRequestingCamera, setIsRequestingCamera] = useState(false);
   const [step, setStep] = useState<"age" | "auth" | "profile" | "mode">("age");
   const [form, setForm] = useState({
@@ -26,10 +29,12 @@ export const StartChatFlow = ({ isOpen, onClose }: StartChatFlowProps) => {
     portfolioUrl: "",
   });
   const navigate = useNavigate();
-  const { profile, isAuthenticated, signInWithGoogle, signInAsGuest, saveProfile } = useAuthProfile();
+  const { profile, isAuthenticated, loading, signInWithGoogle, signInAsGuest, saveProfile } = useAuthProfile();
+  const authDisplayName = profile.nickname.trim() || "Google User";
 
   useEffect(() => {
     if (!isOpen) return;
+    const isReturningFromOAuth = skipAgeGate || sessionStorage.getItem(GOOGLE_AUTH_PENDING_KEY) === "1";
     setForm({
       nickname: profile.nickname || "",
       photoUrl: profile.photoUrl || "",
@@ -39,8 +44,19 @@ export const StartChatFlow = ({ isOpen, onClose }: StartChatFlowProps) => {
       whatsapp: profile.whatsapp || "",
       portfolioUrl: profile.portfolioUrl || "",
     });
-    setStep(isAuthenticated ? "profile" : "age");
-  }, [isOpen, isAuthenticated, profile]);
+    if (isAuthenticated || isReturningFromOAuth) {
+      setStep("profile");
+      return;
+    }
+    if (!loading) {
+      setStep("age");
+    }
+  }, [isOpen, isAuthenticated, loading, profile, skipAgeGate]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    sessionStorage.removeItem(GOOGLE_AUTH_PENDING_KEY);
+  }, [isAuthenticated]);
 
   const handleClose = () => {
     onClose();
@@ -81,8 +97,10 @@ export const StartChatFlow = ({ isOpen, onClose }: StartChatFlowProps) => {
 
   const handleGoogle = async () => {
     try {
+      sessionStorage.setItem(GOOGLE_AUTH_PENDING_KEY, "1");
       await signInWithGoogle();
     } catch (error) {
+      sessionStorage.removeItem(GOOGLE_AUTH_PENDING_KEY);
       const message = error instanceof Error ? error.message : String(error);
       if (message.includes("Unsupported provider")) {
         toast.error("Google auth is not enabled in Supabase yet. Enable Google provider in Auth settings.");
@@ -93,8 +111,22 @@ export const StartChatFlow = ({ isOpen, onClose }: StartChatFlowProps) => {
   };
 
   const handleGuest = () => {
+    sessionStorage.removeItem(GOOGLE_AUTH_PENDING_KEY);
     signInAsGuest();
-    setStep("profile");
+    sessionStorage.setItem(
+      "active-profile",
+      JSON.stringify({
+        nickname: "",
+        photoUrl: "",
+        instagramId: "",
+        snapchatId: "",
+        bio: "",
+        whatsapp: "",
+        portfolioUrl: "",
+        isGuest: true,
+      })
+    );
+    navigate("/chat?mode=video");
   };
 
   return (
@@ -181,6 +213,22 @@ export const StartChatFlow = ({ isOpen, onClose }: StartChatFlowProps) => {
                   exit={{ opacity: 0, x: 20 }}
                   className="flex flex-col gap-3 max-h-[70vh] overflow-y-auto pr-1"
                 >
+                  {isAuthenticated && (
+                    <div className="rounded-2xl border border-accent/30 bg-accent/10 p-3 flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center text-accent">
+                        <BadgeCheck size={20} />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-accent flex items-center gap-1">
+                          Verified Google Account
+                          <Sparkles size={14} />
+                        </p>
+                        <p className="text-sm text-foreground">
+                          Signed in as <span className="font-semibold">{authDisplayName}</span>
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <h2 className="text-2xl font-bold">Set up your profile</h2>
                   <Input placeholder="Nickname (optional)" value={form.nickname} onChange={(e) => setForm((p) => ({ ...p, nickname: e.target.value }))} />
                   <Input placeholder="Profile photo URL (optional)" value={form.photoUrl} onChange={(e) => setForm((p) => ({ ...p, photoUrl: e.target.value }))} />
@@ -201,6 +249,14 @@ export const StartChatFlow = ({ isOpen, onClose }: StartChatFlowProps) => {
                   exit={{ opacity: 0, x: 20 }}
                   className="space-y-4"
                 >
+                  {isAuthenticated && (
+                    <div className="rounded-2xl border border-accent/30 bg-accent/10 p-3 flex items-center gap-3">
+                      <BadgeCheck className="text-accent" size={20} />
+                      <p className="text-sm text-foreground">
+                        Ready to start as <span className="font-semibold">{authDisplayName}</span>
+                      </p>
+                    </div>
+                  )}
                   <h2 className="text-2xl font-bold text-center">Pick chat mode</h2>
                   <button
                     onClick={() => startChat("video")}
