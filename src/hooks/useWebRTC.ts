@@ -105,7 +105,8 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
     const sessionId = `room-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     sessionIdRef.current = sessionId;
 
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const iceServers = await fetchIceServers();
+    const pc = new RTCPeerConnection({ iceServers });
     pcRef.current = pc;
     let matchedPeerId: string | null = null;
 
