@@ -4,26 +4,26 @@ import { supabase } from "@/integrations/supabase/client";
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
-  { urls: "stun:stun2.l.google.com:19302" },
+  { urls: "stun:stun.relay.metered.ca:80" },
   {
-    urls: "turn:openrelay.metered.ca:80",
-    username: "openrelayproject",
-    credential: "openrelayproject",
+    urls: "turn:global.relay.metered.ca:80",
+    username: "69f6cef1ad2010fe37062e6b",
+    credential: "hcETBBGBoiA7yq62",
   },
   {
-    urls: "turn:openrelay.metered.ca:443",
-    username: "openrelayproject",
-    credential: "openrelayproject",
+    urls: "turn:global.relay.metered.ca:80?transport=tcp",
+    username: "69f6cef1ad2010fe37062e6b",
+    credential: "hcETBBGBoiA7yq62",
   },
   {
-    urls: "turns:openrelay.metered.ca:443",
-    username: "openrelayproject",
-    credential: "openrelayproject",
+    urls: "turn:global.relay.metered.ca:443",
+    username: "69f6cef1ad2010fe37062e6b",
+    credential: "hcETBBGBoiA7yq62",
   },
   {
-    urls: "turn:relay1.expressturn.com:3478",
-    username: "efKXI2ADBMEDX4JZR6",
-    credential: "VUWt5vBt5QqLFCt3",
+    urls: "turns:global.relay.metered.ca:443?transport=tcp",
+    username: "69f6cef1ad2010fe37062e6b",
+    credential: "hcETBBGBoiA7yq62",
   },
 ];
 
