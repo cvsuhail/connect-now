@@ -1,4 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /chat
 
 Sitemap: https://umigle.awwads.in/sitemap.xml
