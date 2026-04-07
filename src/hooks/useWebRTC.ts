@@ -87,6 +87,7 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
 
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     pcRef.current = pc;
+    let matchedPeerId: string | null = null;
 
     const remote = new MediaStream();
     setRemoteStream(remote);
