@@ -19,6 +19,8 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const sessionIdRef = useRef<string>("");
   const userIdRef = useRef<string>(crypto.randomUUID());
+  const seekingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isMatchedRef = useRef(false);
   
   const onReceiveMessageRef = useRef(onReceiveMessage);
   useEffect(() => {
@@ -38,6 +40,10 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
   }, []);
 
   const cleanup = useCallback(() => {
+    if (seekingIntervalRef.current) {
+      clearInterval(seekingIntervalRef.current);
+      seekingIntervalRef.current = null;
+    }
     pcRef.current?.close();
     pcRef.current = null;
     if (channelRef.current) {
@@ -45,6 +51,7 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
       channelRef.current = null;
     }
     setRemoteStream(null);
+    isMatchedRef.current = false;
   }, []);
 
   const toggleMute = useCallback(() => {
@@ -122,19 +129,30 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
     channel
       .on("broadcast", { event: "offer" }, async ({ payload }) => {
         if (payload.targetId !== userIdRef.current) return;
+        isMatchedRef.current = true;
+        if (seekingIntervalRef.current) clearInterval(seekingIntervalRef.current);
         setConnectionState("connecting");
-        await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        channel.send({
-          type: "broadcast",
-          event: "answer",
-          payload: { answer, targetId: payload.senderId },
-        });
+        
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          channel.send({
+            type: "broadcast",
+            event: "answer",
+            payload: { answer, targetId: payload.senderId, senderId: userIdRef.current },
+          });
+        } catch (err) {
+          console.error("Error handling offer:", err);
+        }
       })
       .on("broadcast", { event: "answer" }, async ({ payload }) => {
         if (payload.targetId !== userIdRef.current) return;
-        await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+        try {
+          await pc.setRemoteDescription(new RTCSessionDescription(payload.answer));
+        } catch (err) {
+          console.error("Error handling answer:", err);
+        }
       })
       .on("broadcast", { event: "ice-candidate" }, async ({ payload }) => {
         if (payload.targetId !== userIdRef.current) return;
@@ -144,8 +162,15 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
       })
       .on("broadcast", { event: "seeking" }, async ({ payload }) => {
         if (payload.senderId === userIdRef.current) return;
-        // Found a match - create offer
+        if (isMatchedRef.current) return; // Prevent breaking existing matches
+
+        // Glare resolution: only the user with the HIGHER ID creates the offer
+        if (userIdRef.current < payload.senderId) return;
+
+        isMatchedRef.current = true;
+        if (seekingIntervalRef.current) clearInterval(seekingIntervalRef.current);
         setConnectionState("connecting");
+        
         pc.onicecandidate = (event) => {
           if (event.candidate) {
             channel.send({
@@ -155,22 +180,32 @@ export const useWebRTC = (mode: "video" | "chat" = "video", onReceiveMessage?: (
             });
           }
         };
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        channel.send({
-          type: "broadcast",
-          event: "offer",
-          payload: { offer, targetId: payload.senderId, senderId: userIdRef.current },
-        });
+
+        try {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          channel.send({
+            type: "broadcast",
+            event: "offer",
+            payload: { offer, targetId: payload.senderId, senderId: userIdRef.current },
+          });
+        } catch (err) {
+          console.error("Error creating offer:", err);
+        }
       })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
-          // Announce we're seeking
-          channel.send({
-            type: "broadcast",
-            event: "seeking",
-            payload: { senderId: userIdRef.current },
-          });
+          const broadcastSeeking = () => {
+            if (!isMatchedRef.current) {
+              channel.send({
+                type: "broadcast",
+                event: "seeking",
+                payload: { senderId: userIdRef.current },
+              });
+            }
+          };
+          broadcastSeeking();
+          seekingIntervalRef.current = setInterval(broadcastSeeking, 2000);
         }
       });
 
