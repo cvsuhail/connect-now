@@ -2,9 +2,12 @@ import { useState } from "react";
 import Particles from "@/components/Particles";
 import { motion } from "framer-motion";
 import { StartChatFlow } from "@/components/StartChatFlow";
+import { useOnlineCount } from "@/hooks/useOnlineCount";
+import { Users } from "lucide-react";
 
 const Landing = () => {
   const [isFlowOpen, setIsFlowOpen] = useState(false);
+  const onlineCount = useOnlineCount();
 
   return (
     <div className="relative min-h-screen flex flex-col items-center justify-center px-6 overflow-hidden">
@@ -14,13 +17,34 @@ const Landing = () => {
       <motion.div 
         animate={{ 
           scale: [1, 1.1, 1],
-          opacity: [0.3, 0.4, 0.3]
+          opacity: [0.6, 0.8, 0.6]
         }}
         transition={{ repeat: Infinity, duration: 4, ease: "easeInOut" }}
-        className="absolute w-[300px] h-[300px] md:w-[500px] md:h-[500px] rounded-full bg-accent/20 blur-[100px] md:blur-[150px] z-0" 
+        style={{
+          background: "radial-gradient(circle, hsl(var(--accent)/0.15) 0%, transparent 70%)",
+          willChange: "transform, opacity"
+        }}
+        className="absolute w-[600px] h-[600px] md:w-[1000px] md:h-[1000px] rounded-full z-0 pointer-events-none" 
       />
 
       <div className="relative z-10 flex flex-col items-center gap-8 w-full">
+        {/* Active Users Badge */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+          className="flex items-center gap-2 px-4 py-2 bg-secondary/50 backdrop-blur-md rounded-full border border-border"
+        >
+          <div className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+          </div>
+          <span className="text-sm font-medium text-foreground tracking-wide flex items-center gap-1.5">
+            <Users size={14} className="text-muted-foreground" />
+            {onlineCount.toLocaleString()} {onlineCount === 1 ? "User" : "Users"} Online
+          </span>
+        </motion.div>
+
         {/* Logo */}
         <motion.h1 
           initial={{ opacity: 0, y: -50 }}
