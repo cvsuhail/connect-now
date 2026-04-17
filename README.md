@@ -1,3 +1,3 @@
-# Welcome to your Lovable project
+# Umingle Clone
 
-TODO: Document your project here
+
